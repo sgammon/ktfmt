@@ -123,6 +123,22 @@ class NativeImagePlugin : Plugin<Project> {
               }
           else -> opt
         }
+    val pgoProfiles =
+        listOf("default.iprof")
+            .map { profileName ->
+              project.layout.projectDirectory.file(
+                  Paths.get("src", "main", "native-image", "profiles", profileName).toString()
+              )
+            }
+            .let { allProfiles -> listOf("--pgo=${allProfiles.joinToString(",")}") }
+    val pgoArgs =
+        when (val pgo = project.findProperty("ktfmt.native.pgo")) {
+          null,
+          "false" -> emptyList()
+          "true" -> pgoProfiles
+          "train" -> listOf("--pgo-instrument")
+          else -> error("Unrecognized `ktfmt.native.pgo` argument: '$pgo'")
+        }
 
     project.extensions.configure<GraalVMExtension>("graalvmNative") {
       binaries.named("main") {
@@ -140,6 +156,7 @@ class NativeImagePlugin : Plugin<Project> {
         buildArgs(
             buildNativeImageArgs(
                 project,
+                pgoArgs,
                 nativeOpt,
                 nativeTarget,
                 nativeDebug,
@@ -155,6 +172,7 @@ class NativeImagePlugin : Plugin<Project> {
 
   private fun buildNativeImageArgs(
       project: Project,
+      pgoArgs: List<String>,
       nativeOpt: Any,
       nativeTarget: Any,
       nativeDebug: Boolean,
@@ -163,7 +181,7 @@ class NativeImagePlugin : Plugin<Project> {
       preferMusl: Boolean,
       muslSysroot: String?,
   ): List<String> = buildList {
-    add("-O$nativeOpt")
+    if (pgoArgs.isEmpty()) add("-O$nativeOpt") else addAll(pgoArgs)
     add("-march=$nativeTarget")
     if (nativeDebug) {
       add("-g")
